@@ -34,14 +34,14 @@ jobs:
         run: uv run local-agent-eval evaluations/golden_responses.json
       - name: Upload Allure raw results
         if: always()
-        uses: actions/upload-artifact@v5
+        uses: actions/upload-artifact@v6
         with:
           name: allure-results
           path: allure-results
           if-no-files-found: warn
       - name: Upload LLM evaluation report
         if: always()
-        uses: actions/upload-artifact@v5
+        uses: actions/upload-artifact@v6
         with:
           name: llm-evaluation
           path: test-results
@@ -62,10 +62,10 @@ jobs:
         run: npx --yes allure-commandline@2.36.0 generate allure-results --clean -o allure-report
       - name: Configure GitHub Pages
         if: github.event_name == 'push' && github.ref == 'refs/heads/main'
-        uses: actions/configure-pages@v5
+        uses: actions/configure-pages@v6
       - name: Upload GitHub Pages artifact
         if: github.event_name == 'push' && github.ref == 'refs/heads/main'
-        uses: actions/upload-pages-artifact@v4
+        uses: actions/upload-pages-artifact@v5
         with:
           path: allure-report
 
