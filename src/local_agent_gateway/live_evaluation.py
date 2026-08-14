@@ -26,6 +26,7 @@ class LiveRun:
     completion_tokens: int
     estimated_cost_usd: float
     response: str
+    error: str | None
 
 
 def validate_provider_url(provider: str, base_url: str) -> None:
@@ -66,6 +67,11 @@ def run_live_evaluation(
     input_cost_per_million: float = 0,
     output_cost_per_million: float = 0,
     include_responses: bool = False,
+    retries: int = 2,
+    max_tokens: int = 256,
+    temperature: float = 0.0,
+    seed: int = 42,
+    reasoning_effort: str = "none",
     transport: httpx.BaseTransport | None = None,
 ) -> dict[str, Any]:
     headers = {"Authorization": f"Bearer {api_key}"} if api_key else {}
@@ -77,10 +83,50 @@ def run_live_evaluation(
             for repetition in range(1, repetitions + 1):
                 messages = case.get("messages") or [{"role": "user", "content": str(case["prompt"])}]
                 started = time.perf_counter()
-                response = client.post("/chat/completions", json={"model": model, "messages": messages, "stream": False})
+                payload: dict[str, Any] | None = None
+                error: str | None = None
+                for attempt in range(retries + 1):
+                    try:
+                        response = client.post(
+                            "/chat/completions",
+                            json={
+                                "model": model,
+                                "messages": messages,
+                                "stream": False,
+                                "max_tokens": max_tokens,
+                                "temperature": temperature,
+                                "seed": seed,
+                                "reasoning_effort": reasoning_effort,
+                            },
+                        )
+                        response.raise_for_status()
+                        payload = response.json()
+                        break
+                    except httpx.HTTPStatusError as exc:
+                        error = f"upstream HTTP {exc.response.status_code}"
+                    except httpx.TransportError:
+                        error = "upstream unavailable"
+                    except (KeyError, TypeError, ValueError):
+                        error = "invalid upstream response"
+                    if attempt < retries:
+                        time.sleep(min(2**attempt, 4))
                 latency_ms = round((time.perf_counter() - started) * 1000)
-                response.raise_for_status()
-                payload = response.json()
+                if payload is None:
+                    runs.append(
+                        LiveRun(
+                            case=str(case["name"]),
+                            repetition=repetition,
+                            passed=False,
+                            score=0.0,
+                            latency_ms=latency_ms,
+                            prompt_tokens=0,
+                            completion_tokens=0,
+                            estimated_cost_usd=0.0,
+                            response="[redacted]",
+                            error=error or "unknown upstream error",
+                        )
+                    )
+                    continue
                 content = str(payload["choices"][0]["message"]["content"])
                 usage = payload.get("usage") or {}
                 prompt_tokens = int(usage.get("prompt_tokens", 0))
@@ -100,6 +146,7 @@ def run_live_evaluation(
                         completion_tokens=completion_tokens,
                         estimated_cost_usd=round(estimated_cost, 8),
                         response=content if include_responses else "[redacted]",
+                        error=None,
                     )
                 )
                 case_responses.append(content)
@@ -148,6 +195,11 @@ def main() -> None:
     parser.add_argument("--api-key-env", default="OPENROUTER_API_KEY")
     parser.add_argument("--repetitions", type=int, default=3)
     parser.add_argument("--timeout", type=float, default=60)
+    parser.add_argument("--retries", type=int, default=2)
+    parser.add_argument("--max-tokens", type=int, default=256)
+    parser.add_argument("--temperature", type=float, default=0.0)
+    parser.add_argument("--seed", type=int, default=42)
+    parser.add_argument("--reasoning-effort", choices=("none", "low", "medium", "high"), default="none")
     parser.add_argument("--input-cost-per-million", type=float, default=0)
     parser.add_argument("--output-cost-per-million", type=float, default=0)
     parser.add_argument("--minimum-pass-rate", type=float, default=0.8)
@@ -172,6 +224,11 @@ def main() -> None:
         input_cost_per_million=args.input_cost_per_million,
         output_cost_per_million=args.output_cost_per_million,
         include_responses=args.include_responses,
+        retries=args.retries,
+        max_tokens=args.max_tokens,
+        temperature=args.temperature,
+        seed=args.seed,
+        reasoning_effort=args.reasoning_effort,
     )
     args.output.parent.mkdir(parents=True, exist_ok=True)
     args.output.write_text(json.dumps(report, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")

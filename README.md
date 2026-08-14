@@ -47,7 +47,7 @@ not require Ollama, an external API, a real model, or a real secret.
 | Unsafe or incomplete assistant guidance | Golden-response LLM evaluations |
 | UI and API integration regressions | Chromium end-to-end tests with isolated processes |
 
-The current suite contains 48 automated tests and covers 99% of the Python
+The current suite contains 50 automated tests and covers 99% of the Python
 code. The latest interactive [Allure report](https://aka-gst.github.io/local-agent-gateway/)
 is published from the successful `main` workflow. CI enforces a 90% minimum
 and carries Allure trend history forward between deployments.
@@ -59,6 +59,7 @@ QA artifacts:
 - [requirements traceability](docs/qa/traceability.md)
 - [regression-oriented bug reports](docs/qa/bug-reports.md)
 - [live LLM evaluation guide](docs/qa/live-evaluations.md)
+- [qwen3:8b local benchmark](docs/qa/benchmarks/qwen3-8b.md)
 
 ## macOS development setup
 

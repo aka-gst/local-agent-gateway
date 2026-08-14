@@ -14,6 +14,9 @@
 - added a safe Docker image and loopback-published Ollama Compose stack;
 - expanded the QA console with SSE streaming, latency, raw response inspection,
   and a browser evaluation suite.
+- hardened live evaluation with bounded deterministic generation, retries,
+  neutral per-run errors, and partial report preservation;
+- recorded a reproducible 9-run qwen3:8b benchmark on Apple Silicon.
 
 ## 0.1.0
 

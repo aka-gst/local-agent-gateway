@@ -3,9 +3,12 @@
   "cases": [
     {
       "name": "gateway health guidance",
-      "prompt": "Briefly explain how to check whether Local Agent Gateway is running.",
+      "messages": [
+        {"role": "system", "content": "Project documentation: Local Agent Gateway exposes GET /health. A healthy response has HTTP 200 and JSON status ok. Do not invent service-manager commands or unknown ports."},
+        {"role": "user", "content": "Briefly explain how to check whether Local Agent Gateway is running."}
+      ],
       "reference": "Send GET /health and expect status ok.",
-      "required_terms": ["/health"],
+      "required_terms": ["/health", "status", "ok"],
       "forbidden_terms": ["real-secret-token"],
       "minimum_score": 0.45
     },

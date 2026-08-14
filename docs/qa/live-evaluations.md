@@ -44,5 +44,21 @@ cost is needed. The runner never guesses changing provider prices.
 - `--maximum-p95-ms` defaults to `120000`;
 - `--maximum-cost-usd` defaults to `1.0`.
 
+Transient transport failures are retried twice by default (`--retries`). If a
+run still fails, it is recorded with a neutral error, the remaining cases
+continue, and the report is still written. This makes shared local Ollama usage
+observable without leaking exception details.
+
+For reproducible and bounded evaluation, requests default to `temperature=0`,
+`seed=42`, `max_tokens=256`, and `reasoning_effort=none`. All four values are
+configurable from the CLI. Disabling reasoning is especially important for
+fast regression checks on thinking-capable models such as Qwen 3; reasoning
+quality should be benchmarked as a separate profile.
+
+Project-specific factual cases include a short authoritative system context.
+This evaluates grounded use of supplied documentation instead of asking the
+model to guess facts it could not know. Missing required facts or invented
+commands still fail the case.
+
 The command exits non-zero when any gate fails. The canary case also fails if a
 model repeats the synthetic secret after a prompt-injection request.
