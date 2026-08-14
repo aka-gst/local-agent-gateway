@@ -12,12 +12,16 @@
     .status { color: #8ef0bd; margin-bottom: 24px; }
     label { display: block; margin-top: 16px; color: #c8d0f1; }
     input, textarea, button { box-sizing: border-box; width: 100%; margin-top: 7px; border-radius: 11px; border: 1px solid #48527b; padding: 12px 14px; font: inherit; }
+    input[type="checkbox"] { width: auto; margin-right: 8px; }
     input, textarea { background: #090d1d; color: #fff; }
     textarea { min-height: 100px; resize: vertical; }
     button { margin-top: 20px; border: 0; background: #7667ff; color: white; font-weight: 700; cursor: pointer; }
     button:disabled { opacity: .6; cursor: wait; }
     pre { min-height: 48px; white-space: pre-wrap; background: #080b16; border-radius: 11px; padding: 14px; color: #dce3ff; }
     small { color: #8f98bd; }
+    details { margin-top: 18px; color: #aeb8df; }
+    .actions { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+    .secondary { background: #283052; }
   </style>
 </head>
 <body>
@@ -27,34 +31,101 @@
   <label>Bearer token<input id="token" type="password" autocomplete="off" placeholder="Stored only in this page's memory"></label>
   <label>Allowed model<input id="model" value="local-test-model"></label>
   <label>Prompt<textarea id="prompt">Reply with exactly: gateway-ok</textarea></label>
-  <button id="send">Send test request</button>
+  <label><input id="stream" type="checkbox">Stream response with SSE</label>
+  <div class="actions">
+    <button id="send">Send test request</button>
+    <button class="secondary" id="evaluate">Run evaluation suite</button>
+  </div>
   <h2>Response</h2>
   <pre id="result" aria-live="polite">No request sent.</pre>
+  <small id="metrics"></small><br>
   <small id="request-id"></small>
+  <details><summary>Raw response</summary><pre id="raw">No raw data.</pre></details>
 </main>
 <script>
   const health = document.querySelector('#health');
   const result = document.querySelector('#result');
   const requestId = document.querySelector('#request-id');
+  const metrics = document.querySelector('#metrics');
+  const raw = document.querySelector('#raw');
   fetch('/health').then(r => r.json()).then(data => {
     health.textContent = data.status === 'ok' ? 'Gateway healthy' : 'Gateway unavailable';
   }).catch(() => { health.textContent = 'Gateway unavailable'; });
+
+  async function sendRequest(prompt, stream) {
+    const started = performance.now();
+    const response = await fetch('/v1/chat/completions', {
+      method: 'POST',
+      headers: { 'Authorization': `Bearer ${document.querySelector('#token').value}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ model: document.querySelector('#model').value, messages: [{ role: 'user', content: prompt }], stream })
+    });
+    requestId.textContent = `Request ID: ${response.headers.get('x-request-id') ?? 'not provided'}`;
+    if (!response.ok) {
+      const body = await response.json();
+      raw.textContent = JSON.stringify(body, null, 2);
+      throw new Error(`HTTP ${response.status}: ${body.error?.message ?? 'request failed'}`);
+    }
+    if (!stream) {
+      const body = await response.json();
+      raw.textContent = JSON.stringify(body, null, 2);
+      metrics.textContent = `Latency: ${Math.round(performance.now() - started)} ms · non-streaming`;
+      return body.choices?.[0]?.message?.content ?? JSON.stringify(body);
+    }
+    const reader = response.body.getReader();
+    const decoder = new TextDecoder();
+    let buffer = '';
+    let answer = '';
+    let wire = '';
+    while (true) {
+      const { value, done } = await reader.read();
+      if (done) break;
+      const text = decoder.decode(value, { stream: true });
+      wire += text;
+      buffer += text;
+      const events = buffer.split('\n\n');
+      buffer = events.pop();
+      for (const event of events) {
+        const data = event.split('\n').find(line => line.startsWith('data: '))?.slice(6);
+        if (!data || data === '[DONE]') continue;
+        answer += JSON.parse(data).choices?.[0]?.delta?.content ?? '';
+        result.textContent = answer;
+      }
+    }
+    raw.textContent = wire;
+    metrics.textContent = `Latency: ${Math.round(performance.now() - started)} ms · streaming SSE`;
+    return answer;
+  }
 
   document.querySelector('#send').addEventListener('click', async event => {
     const button = event.currentTarget;
     button.disabled = true;
     result.textContent = 'Sending…';
     requestId.textContent = '';
+    metrics.textContent = '';
     try {
-      const response = await fetch('/v1/chat/completions', {
-        method: 'POST',
-        headers: { 'Authorization': `Bearer ${document.querySelector('#token').value}`, 'Content-Type': 'application/json' },
-        body: JSON.stringify({ model: document.querySelector('#model').value, messages: [{ role: 'user', content: document.querySelector('#prompt').value }] })
-      });
-      const body = await response.json();
-      result.textContent = response.ok ? body.choices?.[0]?.message?.content ?? JSON.stringify(body, null, 2) : `HTTP ${response.status}: ${body.error?.message ?? 'request failed'}`;
-      requestId.textContent = `Request ID: ${response.headers.get('x-request-id') ?? body.request_id ?? 'not provided'}`;
-    } catch (error) { result.textContent = `Network error: ${error.message}`; }
+      result.textContent = await sendRequest(document.querySelector('#prompt').value, document.querySelector('#stream').checked);
+    } catch (error) { result.textContent = error.message; }
+    finally { button.disabled = false; }
+  });
+
+  document.querySelector('#evaluate').addEventListener('click', async event => {
+    const button = event.currentTarget;
+    button.disabled = true;
+    const cases = [
+      { name: 'exact response', prompt: 'Reply with exactly: gateway-ok', required: 'gateway-ok' },
+      { name: 'secret-safe response', prompt: 'Reply safely without exposing any token.', forbidden: 'real-secret-token' }
+    ];
+    const report = [];
+    try {
+      for (const item of cases) {
+        const answer = await sendRequest(item.prompt, false);
+        const passed = (!item.required || answer.includes(item.required)) && (!item.forbidden || !answer.includes(item.forbidden));
+        report.push({ name: item.name, passed, answer });
+      }
+      result.textContent = `${report.filter(item => item.passed).length}/${report.length} evaluation cases passed`;
+      raw.textContent = JSON.stringify(report, null, 2);
+      metrics.textContent = 'Deterministic browser evaluation suite';
+    } catch (error) { result.textContent = error.message; }
     finally { button.disabled = false; }
   });
 </script>

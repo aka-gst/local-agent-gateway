@@ -28,6 +28,9 @@ This repository demonstrates several complementary QA layers:
   token similarity, thresholds, and JSON/Markdown reports;
 - code coverage and Allure-compatible raw test results;
 - the same complete suite on every push and pull request in GitHub Actions.
+- optional live-model quality, latency, stability, token, cost, and
+  prompt-injection evaluations for Ollama or OpenRouter;
+- a reproducible Docker image and loopback-published Ollama Compose stack.
 
 The browser suite starts isolated fake upstream and gateway processes. It does
 not require Ollama, an external API, a real model, or a real secret.
@@ -44,9 +47,18 @@ not require Ollama, an external API, a real model, or a real secret.
 | Unsafe or incomplete assistant guidance | Golden-response LLM evaluations |
 | UI and API integration regressions | Chromium end-to-end tests with isolated processes |
 
-The current suite contains 13 automated tests and covers 78% of the Python
+The current suite contains 48 automated tests and covers 99% of the Python
 code. The latest interactive [Allure report](https://aka-gst.github.io/local-agent-gateway/)
-is published from the successful `main` workflow.
+is published from the successful `main` workflow. CI enforces a 90% minimum
+and carries Allure trend history forward between deployments.
+
+QA artifacts:
+
+- [test plan](docs/qa/test-plan.md)
+- [release checklist](docs/qa/checklist.md)
+- [requirements traceability](docs/qa/traceability.md)
+- [regression-oriented bug reports](docs/qa/bug-reports.md)
+- [live LLM evaluation guide](docs/qa/live-evaluations.md)
 
 ## macOS development setup
 
@@ -85,6 +97,29 @@ uv run local-agent-gateway
 
 Open `http://127.0.0.1:8642/demo`. The token field is not persisted by the
 page; never commit a populated `.env` file.
+
+The QA console supports regular and SSE streaming requests, latency display,
+raw JSON/SSE inspection, and a small browser-driven evaluation suite.
+
+## Docker Compose
+
+Copy `.env.example` to the ignored `.env`, set a unique token and the exact
+model name, then start the services:
+
+```bash
+docker compose up --build -d
+docker compose exec ollama ollama pull '<exact-model-name>'
+```
+
+The gateway is published only at `127.0.0.1:8642`. Inside the private Compose
+network it explicitly opts into the `ollama` service hostname; normal host
+configuration continues to reject non-loopback upstream URLs.
+
+Stop the stack without deleting downloaded model data:
+
+```bash
+docker compose down
+```
 
 ## Windows PowerShell runbook
 

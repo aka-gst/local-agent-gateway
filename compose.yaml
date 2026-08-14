@@ -1,0 +1,28 @@
+services:
+  gateway:
+    build: .
+    ports:
+      - "127.0.0.1:8642:8642"
+    environment:
+      GATEWAY_BEARER_TOKEN: "${GATEWAY_BEARER_TOKEN:?set GATEWAY_BEARER_TOKEN}"
+      GATEWAY_ALLOWED_MODELS: "${GATEWAY_ALLOWED_MODELS:?set GATEWAY_ALLOWED_MODELS}"
+      GATEWAY_OLLAMA_BASE_URL: http://ollama:11434/v1
+      GATEWAY_ALLOW_REMOTE_UPSTREAM: "true"
+    depends_on:
+      ollama:
+        condition: service_healthy
+    restart: unless-stopped
+
+  ollama:
+    image: ollama/ollama:0.32.5
+    volumes:
+      - ollama-data:/root/.ollama
+    healthcheck:
+      test: ["CMD", "ollama", "list"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+    restart: unless-stopped
+
+volumes:
+  ollama-data:

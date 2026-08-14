@@ -90,3 +90,47 @@ def test_demo_rejects_invalid_token(page: Page, gateway_url: str) -> None:
     page.locator("#token").fill("invalid-token")
     page.locator("#send").click()
     expect(page.locator("#result")).to_have_text("HTTP 401: unauthorized")
+
+
+@pytest.mark.e2e
+def test_demo_streaming_and_raw_sse(page: Page, gateway_url: str) -> None:
+    page.goto(f"{gateway_url}/demo")
+    page.locator("#token").fill(TOKEN)
+    page.locator("#stream").check()
+    page.locator("#send").click()
+    expect(page.locator("#result")).to_have_text("gateway-stream-ok")
+    expect(page.locator("#metrics")).to_contain_text("streaming SSE")
+    expect(page.locator("#raw")).to_contain_text("data: [DONE]")
+
+
+@pytest.mark.e2e
+def test_demo_runs_evaluation_suite(page: Page, gateway_url: str) -> None:
+    page.goto(f"{gateway_url}/demo")
+    page.locator("#token").fill(TOKEN)
+    page.locator("#evaluate").click()
+    expect(page.locator("#result")).to_have_text("2/2 evaluation cases passed")
+    expect(page.locator("#metrics")).to_have_text("Deterministic browser evaluation suite")
+    expect(page.locator("#raw")).to_contain_text('"passed": true')
+
+
+@pytest.mark.e2e
+def test_streaming_round_trip_over_real_http(gateway_url: str) -> None:
+    with httpx.Client(timeout=5) as client:
+        with client.stream(
+            "POST",
+            f"{gateway_url}/v1/chat/completions",
+            headers={"Authorization": f"Bearer {TOKEN}", "X-Request-ID": "e2e-stream-1"},
+            json={
+                "model": "local-test-model",
+                "messages": [{"role": "user", "content": "stream"}],
+                "stream": True,
+            },
+        ) as response:
+            body = b"".join(response.iter_bytes())
+
+    assert response.status_code == 200
+    assert response.headers["content-type"].startswith("text/event-stream")
+    assert response.headers["x-request-id"] == "e2e-stream-1"
+    assert b'"content": "gateway-"' in body
+    assert b'"content": "stream-ok"' in body
+    assert body.endswith(b"data: [DONE]\n\n")
