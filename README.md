@@ -1,5 +1,9 @@
 # Local Agent Gateway
 
+[![Quality](https://github.com/aka-gst/local-agent-gateway/actions/workflows/quality.yml/badge.svg)](https://github.com/aka-gst/local-agent-gateway/actions/workflows/quality.yml)
+[![Python 3.11+](https://img.shields.io/badge/Python-3.11%2B-3776AB?logo=python&logoColor=white)](https://www.python.org/)
+[![Allure report](https://img.shields.io/badge/Allure-live_report-ff4f64)](https://aka-gst.github.io/local-agent-gateway/)
+
 Minimal loopback-only FastAPI gateway between an OpenAI-compatible client and a
 local Ollama server.
 
@@ -10,6 +14,8 @@ Open-LLM-VTuber -> http://127.0.0.1:8642/v1 -> Ollama at http://127.0.0.1:11434/
 The gateway exposes a public `GET /health` endpoint. Requests to
 `POST /v1/chat/completions` require a bearer token. Both streaming and
 non-streaming chat-completion requests are supported.
+
+![Successful request in the Gateway QA Console](docs/assets/qa-console.png)
 
 ## Portfolio quality suite
 
@@ -25,6 +31,22 @@ This repository demonstrates several complementary QA layers:
 
 The browser suite starts isolated fake upstream and gateway processes. It does
 not require Ollama, an external API, a real model, or a real secret.
+
+### What the suite protects against
+
+| Risk | Automated check |
+|---|---|
+| Missing or incorrect bearer authentication | API security tests and a negative browser scenario |
+| Unsupported backend or model reaching the upstream | Allowlist contract tests |
+| Oversized or malformed requests | Boundary and validation tests |
+| Upstream errors or sensitive values leaking into responses/logs | Failure-path and log-safety tests |
+| Broken streaming or request-ID propagation | Proxy contract tests |
+| Unsafe or incomplete assistant guidance | Golden-response LLM evaluations |
+| UI and API integration regressions | Chromium end-to-end tests with isolated processes |
+
+The current suite contains 13 automated tests and covers 78% of the Python
+code. The latest interactive [Allure report](https://aka-gst.github.io/local-agent-gateway/)
+is published from the successful `main` workflow.
 
 ## macOS development setup
 
