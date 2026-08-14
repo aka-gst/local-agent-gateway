@@ -36,7 +36,12 @@ def test_live_evaluation_collects_quality_latency_stability_tokens_and_cost() ->
         nonlocal call_count
         call_count += 1
         assert request.url.path.endswith("/chat/completions")
-        assert json.loads(request.content)["model"] == "test-model"
+        request_body = json.loads(request.content)
+        assert request_body["model"] == "test-model"
+        assert request_body["max_tokens"] == 256
+        assert request_body["temperature"] == 0.0
+        assert request_body["seed"] == 42
+        assert request_body["reasoning_effort"] == "none"
         content = "Use GET /health and expect status ok." if call_count == 1 else "Check GET /health; status should be ok."
         return httpx.Response(
             200,
@@ -72,6 +77,7 @@ def test_live_evaluation_collects_quality_latency_stability_tokens_and_cost() ->
     assert report["estimated_cost_usd"] == pytest.approx(0.00004)
     assert 0 < report["stability"]["health"] <= 1
     assert all(result["response"] == "[redacted]" for result in report["results"])
+    assert all(result["error"] is None for result in report["results"])
 
 
 def test_empty_live_dataset_has_zero_metrics() -> None:
@@ -137,3 +143,41 @@ def test_openrouter_cli_requires_key(tmp_path, monkeypatch: pytest.MonkeyPatch) 
     with pytest.raises(SystemExit) as exit_info:
         live_evaluation.main()
     assert exit_info.value.code == 2
+
+
+def test_transient_disconnect_is_retried() -> None:
+    calls = 0
+
+    def upstream(request: httpx.Request) -> httpx.Response:
+        nonlocal calls
+        calls += 1
+        if calls == 1:
+            raise httpx.RemoteProtocolError("synthetic disconnect", request=request)
+        return httpx.Response(200, json={"choices": [{"message": {"content": "ok"}}]})
+
+    report = run_live_evaluation(
+        {"cases": [{"name": "retry", "prompt": "answer", "required_terms": ["ok"]}]},
+        base_url="http://127.0.0.1:11434/v1",
+        model="test-model",
+        retries=1,
+        transport=httpx.MockTransport(upstream),
+    )
+    assert calls == 2
+    assert report["pass_rate"] == 1.0
+    assert report["results"][0]["error"] is None
+
+
+def test_persistent_disconnect_is_reported_without_crashing() -> None:
+    def upstream(request: httpx.Request) -> httpx.Response:
+        raise httpx.ConnectError("synthetic private network details", request=request)
+
+    report = run_live_evaluation(
+        {"cases": [{"name": "failure", "prompt": "answer"}]},
+        base_url="http://127.0.0.1:11434/v1",
+        model="test-model",
+        retries=0,
+        transport=httpx.MockTransport(upstream),
+    )
+    assert report["pass_rate"] == 0.0
+    assert report["results"][0]["error"] == "upstream unavailable"
+    assert "private" not in json.dumps(report)

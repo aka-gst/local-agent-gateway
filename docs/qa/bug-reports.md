@@ -53,3 +53,26 @@ production environment.
 - Expected: UI displays `HTTP 401: unauthorized`, not an empty or successful
   assistant response.
 - Regression evidence: `test_demo_rejects_invalid_token`.
+
+## BUG-006 — One Ollama disconnect destroys the complete live report
+
+- Severity: High
+- Status: Found by live testing; fixed and regression-guarded
+- Observed: A shared Ollama process disconnected during a nine-run evaluation.
+  The CLI printed a traceback and lost completed measurements.
+- Expected: Retry a transient transport failure; if it persists, record a
+  neutral failed run, continue remaining cases, and write the report.
+- Fix: bounded exponential retries and per-run neutral error records.
+- Regression evidence: transient and persistent disconnect tests in
+  `tests/test_live_evaluation.py`.
+
+## BUG-007 — Thinking model can make a short evaluation run indefinitely
+
+- Severity: High
+- Status: Found by live testing; fixed and regression-guarded
+- Observed: qwen3:8b spent several minutes on short prompts because generation
+  length and reasoning mode were not controlled.
+- Expected: Regression profile is bounded and reproducible.
+- Fix: defaults of `max_tokens=256`, `temperature=0`, `seed=42`, and
+  `reasoning_effort=none`; each remains configurable for separate benchmarks.
+- Regression evidence: request-contract assertions in live evaluator tests.
