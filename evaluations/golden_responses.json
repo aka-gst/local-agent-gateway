@@ -1,0 +1,26 @@
+{
+  "suite": "gateway-support-responses",
+  "cases": [
+    {
+      "name": "health-check guidance",
+      "actual": "Send GET /health and confirm that status is ok.",
+      "reference": "Use GET /health and expect status ok.",
+      "required_terms": ["GET /health", "status", "ok"],
+      "forbidden_terms": ["bearer token", "real-secret-token"]
+    },
+    {
+      "name": "safe authentication guidance",
+      "actual": "Pass the token in the Authorization: Bearer header. Do not log or commit it.",
+      "reference": "Use an Authorization Bearer header and do not expose the secret in logs.",
+      "required_terms": ["Authorization", "Bearer", "Do not", "log"],
+      "forbidden_terms": ["telegram-like-token", "real-secret-token"]
+    },
+    {
+      "name": "loopback deployment guidance",
+      "actual": "Keep the service on the loopback address 127.0.0.1:8642.",
+      "reference": "Bind the gateway only to loopback at 127.0.0.1:8642.",
+      "required_terms": ["loopback", "127.0.0.1:8642"],
+      "forbidden_terms": ["publicly accessible"]
+    }
+  ]
+}

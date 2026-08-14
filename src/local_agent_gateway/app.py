@@ -6,16 +6,18 @@ import time
 import uuid
 from collections.abc import AsyncIterator, Awaitable, Callable
 from contextlib import asynccontextmanager
+from pathlib import Path
 from typing import Any
 
 import httpx
 from fastapi import FastAPI, Request
-from fastapi.responses import JSONResponse, Response, StreamingResponse
+from fastapi.responses import HTMLResponse, JSONResponse, Response, StreamingResponse
 
 from .config import Settings, get_settings
 
 logger = logging.getLogger("local_agent_gateway")
 REQUEST_ID_HEADER = "X-Request-ID"
+DEMO_HTML = Path(__file__).with_name("static").joinpath("index.html").read_text(encoding="utf-8")
 
 
 def _safe_request_id(value: str | None) -> str:
@@ -81,6 +83,10 @@ def create_app(
     @app.get("/health")
     async def health() -> dict[str, str]:
         return {"status": "ok"}
+
+    @app.get("/demo", response_class=HTMLResponse)
+    async def demo() -> str:
+        return DEMO_HTML
 
     @app.post("/v1/chat/completions")
     async def chat_completions(request: Request) -> Response:

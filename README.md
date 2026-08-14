@@ -11,6 +11,59 @@ The gateway exposes a public `GET /health` endpoint. Requests to
 `POST /v1/chat/completions` require a bearer token. Both streaming and
 non-streaming chat-completion requests are supported.
 
+## Portfolio quality suite
+
+This repository demonstrates several complementary QA layers:
+
+- API contract, validation, authentication, proxy, and streaming tests with
+  `pytest` and FastAPI's test client;
+- a real Chromium end-to-end test of the `/demo` QA console with Playwright;
+- deterministic LLM-response evaluations with required terms, safety checks,
+  token similarity, thresholds, and JSON/Markdown reports;
+- code coverage and Allure-compatible raw test results;
+- the same complete suite on every push and pull request in GitHub Actions.
+
+The browser suite starts isolated fake upstream and gateway processes. It does
+not require Ollama, an external API, a real model, or a real secret.
+
+## macOS development setup
+
+The project requires Python 3.11 or newer. `uv` downloads and manages the
+matching Python runtime and virtual environment for this project.
+
+Install `uv` using either Homebrew or the official installer, then sync the
+project and install Chromium:
+
+```bash
+brew install uv
+uv sync --extra test
+uv run playwright install chromium
+```
+
+Run all API, unit, LLM-evaluation, and browser tests with coverage and Allure
+results:
+
+```bash
+uv run pytest --cov=local_agent_gateway --cov-report=term-missing --alluredir=allure-results
+uv run local-agent-eval evaluations/golden_responses.json
+```
+
+The evaluator writes human-readable and machine-readable reports to
+`test-results/`. The pytest command writes raw Allure data to
+`allure-results/`; an optional local Allure installation can turn it into an
+interactive HTML report. GitHub Actions uploads both directories as build
+artifacts even when a check fails.
+
+To try the UI manually, copy `.env.example` to the ignored `.env`, replace its
+placeholders, start Ollama, then run:
+
+```bash
+uv run local-agent-gateway
+```
+
+Open `http://127.0.0.1:8642/demo`. The token field is not persisted by the
+page; never commit a populated `.env` file.
+
 ## Windows PowerShell runbook
 
 Run all commands in PowerShell 7 (`pwsh`). Paths below are relative to the

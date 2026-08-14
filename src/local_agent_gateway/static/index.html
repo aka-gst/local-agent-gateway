@@ -1,0 +1,62 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Local Agent Gateway QA Console</title>
+  <style>
+    :root { color-scheme: dark; font-family: Inter, ui-sans-serif, system-ui, sans-serif; }
+    body { margin: 0; min-height: 100vh; display: grid; place-items: center; background: radial-gradient(circle at top, #24315f, #080b16 60%); color: #eef2ff; }
+    main { width: min(680px, calc(100% - 40px)); padding: 32px; border: 1px solid #39436a; border-radius: 22px; background: #11162be8; box-shadow: 0 24px 80px #0008; }
+    h1 { margin: 0 0 8px; font-size: clamp(1.6rem, 5vw, 2.5rem); }
+    .status { color: #8ef0bd; margin-bottom: 24px; }
+    label { display: block; margin-top: 16px; color: #c8d0f1; }
+    input, textarea, button { box-sizing: border-box; width: 100%; margin-top: 7px; border-radius: 11px; border: 1px solid #48527b; padding: 12px 14px; font: inherit; }
+    input, textarea { background: #090d1d; color: #fff; }
+    textarea { min-height: 100px; resize: vertical; }
+    button { margin-top: 20px; border: 0; background: #7667ff; color: white; font-weight: 700; cursor: pointer; }
+    button:disabled { opacity: .6; cursor: wait; }
+    pre { min-height: 48px; white-space: pre-wrap; background: #080b16; border-radius: 11px; padding: 14px; color: #dce3ff; }
+    small { color: #8f98bd; }
+  </style>
+</head>
+<body>
+<main>
+  <h1>Gateway QA Console</h1>
+  <div class="status" id="health">Checking gateway…</div>
+  <label>Bearer token<input id="token" type="password" autocomplete="off" placeholder="Stored only in this page's memory"></label>
+  <label>Allowed model<input id="model" value="local-test-model"></label>
+  <label>Prompt<textarea id="prompt">Reply with exactly: gateway-ok</textarea></label>
+  <button id="send">Send test request</button>
+  <h2>Response</h2>
+  <pre id="result" aria-live="polite">No request sent.</pre>
+  <small id="request-id"></small>
+</main>
+<script>
+  const health = document.querySelector('#health');
+  const result = document.querySelector('#result');
+  const requestId = document.querySelector('#request-id');
+  fetch('/health').then(r => r.json()).then(data => {
+    health.textContent = data.status === 'ok' ? 'Gateway healthy' : 'Gateway unavailable';
+  }).catch(() => { health.textContent = 'Gateway unavailable'; });
+
+  document.querySelector('#send').addEventListener('click', async event => {
+    const button = event.currentTarget;
+    button.disabled = true;
+    result.textContent = 'Sending…';
+    requestId.textContent = '';
+    try {
+      const response = await fetch('/v1/chat/completions', {
+        method: 'POST',
+        headers: { 'Authorization': `Bearer ${document.querySelector('#token').value}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ model: document.querySelector('#model').value, messages: [{ role: 'user', content: document.querySelector('#prompt').value }] })
+      });
+      const body = await response.json();
+      result.textContent = response.ok ? body.choices?.[0]?.message?.content ?? JSON.stringify(body, null, 2) : `HTTP ${response.status}: ${body.error?.message ?? 'request failed'}`;
+      requestId.textContent = `Request ID: ${response.headers.get('x-request-id') ?? body.request_id ?? 'not provided'}`;
+    } catch (error) { result.textContent = `Network error: ${error.message}`; }
+    finally { button.disabled = false; }
+  });
+</script>
+</body>
+</html>
