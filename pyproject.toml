@@ -16,14 +16,24 @@ dependencies = [
 
 [project.optional-dependencies]
 test = [
+  "allure-pytest>=2.15,<3",
   "pytest>=8,<9",
+  "pytest-cov>=6,<7",
+  "pytest-playwright>=0.7,<1",
 ]
 
 [project.scripts]
 local-agent-gateway = "local_agent_gateway.main:run"
+local-agent-eval = "local_agent_gateway.evaluation:main"
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/local_agent_gateway"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+addopts = ["--strict-config", "--strict-markers"]
+markers = [
+  "api: API contract and security tests",
+  "e2e: browser end-to-end tests",
+  "llm_eval: deterministic LLM response quality tests",
+]

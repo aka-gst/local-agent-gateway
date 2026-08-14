@@ -1,5 +1,11 @@
-.env
 .venv/
-__pycache__/
 .pytest_cache/
+.coverage
+__pycache__/
 *.py[cod]
+.env
+allure-results/
+allure-report/
+test-results/
+playwright-report/
+.DS_Store

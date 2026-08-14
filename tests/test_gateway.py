@@ -4,6 +4,7 @@ import json
 import logging
 
 import httpx
+import pytest
 from fastapi.testclient import TestClient
 
 from local_agent_gateway.app import create_app
@@ -15,9 +16,10 @@ PROMPT = "synthetic-sensitive-prompt"
 EXCEPTION_MESSAGE = "synthetic-sensitive-exception-message"
 LOCAL_PATH = r"C:\synthetic-private\gateway\backend.py"
 SENSITIVE_VALUES = (TOKEN, PROMPT, EXCEPTION_MESSAGE, LOCAL_PATH, "Traceback")
+pytestmark = pytest.mark.api
 
 
-def test_settings() -> Settings:
+def _test_settings() -> Settings:
     return Settings(
         bearer_token=TOKEN,
         allowed_backends="ollama",
@@ -40,7 +42,7 @@ def assert_safe_failure(response: httpx.Response, caplog, expected_status: int) 
 
 
 def test_health_is_public_and_has_request_id() -> None:
-    with TestClient(create_app(test_settings())) as client:
+    with TestClient(create_app(_test_settings())) as client:
         response = client.get("/health")
     assert response.status_code == 200
     assert response.json() == {"status": "ok"}
@@ -49,7 +51,7 @@ def test_health_is_public_and_has_request_id() -> None:
 
 def test_invalid_bearer_is_rejected_without_sensitive_output(caplog) -> None:
     caplog.set_level(logging.INFO, logger="local_agent_gateway")
-    with TestClient(create_app(test_settings())) as client:
+    with TestClient(create_app(_test_settings())) as client:
         response = client.post(
             "/v1/chat/completions",
             headers={"Authorization": "Bearer synthetic-wrong-token"},
@@ -65,7 +67,7 @@ def test_disallowed_backend_is_rejected_before_network_call(caplog) -> None:
         raise AssertionError("network call must not occur")
 
     caplog.set_level(logging.INFO, logger="local_agent_gateway")
-    app = create_app(test_settings(), httpx.MockTransport(unexpected_upstream))
+    app = create_app(_test_settings(), httpx.MockTransport(unexpected_upstream))
     with TestClient(app) as client:
         response = client.post(
             "/v1/chat/completions",
@@ -86,7 +88,7 @@ def test_disallowed_model_is_rejected_before_network_call(caplog) -> None:
         raise AssertionError("network call must not occur")
 
     caplog.set_level(logging.INFO, logger="local_agent_gateway")
-    app = create_app(test_settings(), httpx.MockTransport(unexpected_upstream))
+    app = create_app(_test_settings(), httpx.MockTransport(unexpected_upstream))
     with TestClient(app) as client:
         response = client.post(
             "/v1/chat/completions",
@@ -111,7 +113,7 @@ def test_allowed_request_is_forwarded_without_client_auth_or_backend() -> None:
         captured["json"] = json.loads(request.content)
         return httpx.Response(200, json={"id": "local", "choices": []})
 
-    app = create_app(test_settings(), httpx.MockTransport(upstream))
+    app = create_app(_test_settings(), httpx.MockTransport(upstream))
     with TestClient(app) as client:
         response = client.post(
             "/v1/chat/completions",
@@ -157,7 +159,7 @@ def test_streaming_request_is_forwarded_and_upstream_is_closed() -> None:
             stream=SyntheticStream(),
         )
 
-    app = create_app(test_settings(), httpx.MockTransport(upstream))
+    app = create_app(_test_settings(), httpx.MockTransport(upstream))
     with TestClient(app) as client:
         response = client.post(
             "/v1/chat/completions",
@@ -195,7 +197,7 @@ def test_upstream_connection_failure_is_neutral_and_safe(caplog) -> None:
         raise httpx.ConnectError(f"{EXCEPTION_MESSAGE} at {LOCAL_PATH}", request=request)
 
     caplog.set_level(logging.INFO, logger="local_agent_gateway")
-    app = create_app(test_settings(), httpx.MockTransport(upstream))
+    app = create_app(_test_settings(), httpx.MockTransport(upstream))
     with TestClient(app) as client:
         response = client.post(
             "/v1/chat/completions",
@@ -212,7 +214,7 @@ def test_upstream_timeout_is_neutral_and_safe(caplog) -> None:
         raise httpx.ReadTimeout(f"{EXCEPTION_MESSAGE} at {LOCAL_PATH}")
 
     caplog.set_level(logging.INFO, logger="local_agent_gateway")
-    app = create_app(test_settings(), httpx.MockTransport(upstream))
+    app = create_app(_test_settings(), httpx.MockTransport(upstream))
     with TestClient(app) as client:
         response = client.post(
             "/v1/chat/completions",
