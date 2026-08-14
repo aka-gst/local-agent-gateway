@@ -224,3 +224,86 @@ def test_upstream_timeout_is_neutral_and_safe(caplog) -> None:
 
     assert response.json()["error"]["message"] == "upstream unavailable"
     assert_safe_failure(response, caplog, 502)
+
+
+@pytest.mark.parametrize(
+    ("headers", "content", "expected_status", "message"),
+    [
+        ({**auth(), "Content-Type": "text/plain"}, b"{}", 415, "unsupported media type"),
+        ({**auth(), "Content-Type": "application/json"}, b"{", 400, "invalid request"),
+        ({**auth(), "Content-Type": "application/json"}, b"[]", 400, "invalid request"),
+        ({**auth(), "Content-Type": "application/json"}, b'{"model":"local-test-model"}', 400, "invalid request"),
+    ],
+)
+def test_invalid_payloads_are_rejected(headers, content, expected_status, message) -> None:
+    with TestClient(create_app(_test_settings())) as client:
+        response = client.post("/v1/chat/completions", headers=headers, content=content)
+    assert response.status_code == expected_status
+    assert response.json()["error"]["message"] == message
+
+
+def test_oversized_request_is_rejected_by_middleware() -> None:
+    configured = _test_settings().model_copy(update={"max_request_bytes": 1024})
+    with TestClient(create_app(configured)) as client:
+        response = client.post(
+            "/v1/chat/completions",
+            headers={**auth(), "Content-Type": "application/json"},
+            content=b"x" * 1025,
+        )
+    assert response.status_code == 413
+    assert response.json()["error"]["message"] == "request too large"
+
+
+def test_unsafe_request_id_is_replaced() -> None:
+    with TestClient(create_app(_test_settings())) as client:
+        response = client.get("/health", headers={"X-Request-ID": "unsafe id with spaces"})
+    assert response.headers["x-request-id"] != "unsafe id with spaces"
+    assert len(response.headers["x-request-id"]) == 32
+
+
+@pytest.mark.parametrize("stream", [False, True])
+def test_upstream_http_error_is_mapped_to_safe_502(stream: bool) -> None:
+    def upstream(_: httpx.Request) -> httpx.Response:
+        return httpx.Response(503, text="synthetic private upstream details")
+
+    app = create_app(_test_settings(), httpx.MockTransport(upstream))
+    with TestClient(app) as client:
+        response = client.post(
+            "/v1/chat/completions",
+            headers=auth(),
+            json={"model": MODEL, "messages": [], "stream": stream},
+        )
+    assert response.status_code == 502
+    assert response.json()["error"]["message"] == "upstream error"
+    assert "private upstream" not in response.text
+
+
+def test_invalid_upstream_json_is_mapped_to_safe_502() -> None:
+    app = create_app(
+        _test_settings(),
+        httpx.MockTransport(lambda _: httpx.Response(200, content=b"not-json")),
+    )
+    with TestClient(app) as client:
+        response = client.post(
+            "/v1/chat/completions",
+            headers=auth(),
+            json={"model": MODEL, "messages": []},
+        )
+    assert response.status_code == 502
+    assert response.json()["error"]["message"] == "invalid upstream response"
+
+
+def test_streaming_connection_failure_is_safe() -> None:
+    def upstream(request: httpx.Request) -> httpx.Response:
+        raise httpx.ConnectError("synthetic secret network path", request=request)
+
+    app = create_app(_test_settings(), httpx.MockTransport(upstream))
+    with TestClient(app) as client:
+        response = client.post(
+            "/v1/chat/completions",
+            headers=auth(),
+            json={"model": MODEL, "messages": [], "stream": True},
+        )
+    assert response.status_code == 502
+    assert response.json()["error"]["message"] == "upstream unavailable"
+    assert "synthetic secret" not in response.text

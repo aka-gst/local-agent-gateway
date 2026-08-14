@@ -19,6 +19,7 @@ class Settings(BaseSettings):
     allowed_models: str = Field(min_length=1)
     default_backend: str = "ollama"
     ollama_base_url: HttpUrl = HttpUrl("http://127.0.0.1:11434/v1")
+    allow_remote_upstream: bool = False
     upstream_timeout_seconds: float = Field(default=30.0, gt=0, le=300)
     max_request_bytes: int = Field(default=1_048_576, ge=1024, le=10_485_760)
 
@@ -29,15 +30,10 @@ class Settings(BaseSettings):
             raise ValueError("allowlist must not be empty")
         return value
 
-    @field_validator("ollama_base_url")
-    @classmethod
-    def loopback_only(cls, value: HttpUrl) -> HttpUrl:
-        if value.host not in {"127.0.0.1", "localhost", "::1"}:
-            raise ValueError("Ollama base URL must use a loopback host")
-        return value
-
     @model_validator(mode="after")
     def validate_backend_configuration(self) -> Settings:
+        if self.ollama_base_url.host not in {"127.0.0.1", "localhost", "::1"} and not self.allow_remote_upstream:
+            raise ValueError("Ollama base URL must use a loopback host unless remote upstream is explicitly enabled")
         if not self.backend_allowlist.issubset({"ollama"}):
             raise ValueError("only the ollama backend is supported")
         if self.default_backend not in self.backend_allowlist:
