@@ -9,8 +9,9 @@ permissions:
   pages: write
   id-token: write
 
+# Per-ref, so pushing a tag no longer cancels an in-flight main deployment.
 concurrency:
-  group: pages
+  group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
 jobs:
@@ -113,6 +114,10 @@ jobs:
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     needs: test
     runs-on: ubuntu-latest
+    # GitHub Pages allows one deployment at a time; queue instead of cancelling.
+    concurrency:
+      group: pages
+      cancel-in-progress: false
     environment:
       name: github-pages
       url: ${{ steps.deployment.outputs.page_url }}
