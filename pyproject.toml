@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "local-agent-gateway"
-version = "0.2.1"
+version = "0.3.0"
 description = "Loopback-only gateway for a local Ollama backend"
 requires-python = ">=3.11"
 dependencies = [
@@ -26,6 +26,7 @@ test = [
 local-agent-gateway = "local_agent_gateway.main:run"
 local-agent-eval = "local_agent_gateway.evaluation:main"
 local-agent-live-eval = "local_agent_gateway.live_evaluation:main"
+local-agent-qa-metrics = "local_agent_gateway.qa_metrics:main"
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/local_agent_gateway"]

@@ -1,5 +1,17 @@
 # Changelog
 
+## 0.3.0
+
+- added `local-agent-qa-metrics`, which folds Allure results, the coverage
+  report, the deterministic evaluation, and the recorded live benchmark into a
+  single machine-readable run report;
+- published `qa-metrics.json` and `qa-metrics-history.json` to GitHub Pages
+  next to the Allure report, so a consumer renders enforced numbers instead of
+  copied ones;
+- recorded the qwen3:8b local benchmark as committed JSON with its origin,
+  environment, and sampling profile;
+- grew the suite from 50 to 66 tests while holding 99% coverage.
+
 ## 0.2.1
 
 - hardened live evaluation with bounded deterministic generation, retries,

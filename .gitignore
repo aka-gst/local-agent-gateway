@@ -1,6 +1,7 @@
 .venv/
 .pytest_cache/
 .coverage
+coverage.json
 __pycache__/
 *.py[cod]
 .env

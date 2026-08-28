@@ -47,10 +47,26 @@ not require Ollama, an external API, a real model, or a real secret.
 | Unsafe or incomplete assistant guidance | Golden-response LLM evaluations |
 | UI and API integration regressions | Chromium end-to-end tests with isolated processes |
 
-The current suite contains 50 automated tests and covers 99% of the Python
+The current suite contains 66 automated tests and covers 99% of the Python
 code. The latest interactive [Allure report](https://aka-gst.github.io/local-agent-gateway/)
 is published from the successful `main` workflow. CI enforces a 90% minimum
 and carries Allure trend history forward between deployments.
+
+### Published metrics feed
+
+Every successful `main` run also publishes the same numbers as JSON, so a
+dashboard or portfolio page can render the enforced result instead of a
+hand-copied claim:
+
+| Feed | Contents |
+|---|---|
+| [`qa-metrics.json`](https://aka-gst.github.io/local-agent-gateway/qa-metrics.json) | Test totals per suite, coverage against the CI threshold, deterministic and recorded live evaluation summaries, commit and workflow-run links |
+| [`qa-metrics-history.json`](https://aka-gst.github.io/local-agent-gateway/qa-metrics-history.json) | The last 20 published runs, for trend lines |
+
+Both files are deployed by the same GitHub Pages job that deploys the Allure
+report, so a run either publishes an updated report and matching metrics or
+publishes neither. See the [metrics feed contract](docs/qa/metrics-feed.md) for
+the schema and consumption rules.
 
 QA artifacts:
 
@@ -60,6 +76,7 @@ QA artifacts:
 - [regression-oriented bug reports](docs/qa/bug-reports.md)
 - [live LLM evaluation guide](docs/qa/live-evaluations.md)
 - [qwen3:8b local benchmark](docs/qa/benchmarks/qwen3-8b.md)
+- [published metrics feed](docs/qa/metrics-feed.md)
 
 ## macOS development setup
 
@@ -79,15 +96,18 @@ Run all API, unit, LLM-evaluation, and browser tests with coverage and Allure
 results:
 
 ```bash
-uv run pytest --cov=local_agent_gateway --cov-report=term-missing --alluredir=allure-results
+uv run pytest --cov=local_agent_gateway --cov-report=term-missing --cov-report=json:coverage.json --alluredir=allure-results
 uv run local-agent-eval evaluations/golden_responses.json
+uv run local-agent-qa-metrics
 ```
 
 The evaluator writes human-readable and machine-readable reports to
 `test-results/`. The pytest command writes raw Allure data to
 `allure-results/`; an optional local Allure installation can turn it into an
-interactive HTML report. GitHub Actions uploads both directories as build
-artifacts even when a check fails.
+interactive HTML report. `local-agent-qa-metrics` folds the Allure results,
+the coverage report, the deterministic evaluation, and the recorded live
+benchmark into `test-results/qa-metrics.json`. GitHub Actions uploads all of
+them as build artifacts even when a check fails.
 
 To try the UI manually, copy `.env.example` to the ignored `.env`, replace its
 placeholders, start Ollama, then run:

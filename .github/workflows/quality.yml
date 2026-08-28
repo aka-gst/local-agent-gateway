@@ -29,7 +29,13 @@ jobs:
       - name: Install Chromium
         run: uv run playwright install --with-deps chromium
       - name: Run API, unit, and browser tests
-        run: uv run pytest --cov=local_agent_gateway --cov-report=term-missing --cov-fail-under=90 --alluredir=allure-results
+        run: >-
+          uv run pytest
+          --cov=local_agent_gateway
+          --cov-report=term-missing
+          --cov-report=json:coverage.json
+          --cov-fail-under=90
+          --alluredir=allure-results
       - name: Run deterministic LLM evaluations
         run: uv run local-agent-eval evaluations/golden_responses.json
       - name: Validate Docker Compose
@@ -39,6 +45,21 @@ jobs:
         run: docker compose config --quiet
       - name: Build gateway container
         run: docker build --tag local-agent-gateway:test .
+      - name: Restore published QA metrics history
+        if: always()
+        run: |
+          curl --fail --silent --show-error --location \
+            "https://aka-gst.github.io/local-agent-gateway/qa-metrics-history.json" \
+            --output previous-qa-metrics-history.json || true
+      - name: Build machine-readable QA metrics report
+        if: always()
+        run: >-
+          uv run local-agent-qa-metrics
+          --coverage-threshold 90
+          --commit "${{ github.sha }}"
+          --branch "${{ github.ref_name }}"
+          --run-url "${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+          --previous-history previous-qa-metrics-history.json
       - name: Upload Allure raw results
         if: always()
         uses: actions/upload-artifact@v6
@@ -46,11 +67,11 @@ jobs:
           name: allure-results
           path: allure-results
           if-no-files-found: warn
-      - name: Upload LLM evaluation report
+      - name: Upload QA reports
         if: always()
         uses: actions/upload-artifact@v6
         with:
-          name: llm-evaluation
+          name: qa-reports
           path: test-results
           if-no-files-found: warn
       - name: Set up Java for Allure
@@ -76,6 +97,9 @@ jobs:
       - name: Generate Allure HTML report
         if: github.event_name == 'push' && github.ref == 'refs/heads/main'
         run: npx --yes allure-commandline@2.36.0 generate allure-results --clean -o allure-report
+      - name: Publish QA metrics next to the Allure report
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        run: cp test-results/qa-metrics.json test-results/qa-metrics-history.json allure-report/
       - name: Configure GitHub Pages
         if: github.event_name == 'push' && github.ref == 'refs/heads/main'
         uses: actions/configure-pages@v6
