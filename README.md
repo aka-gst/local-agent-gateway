@@ -1,5 +1,11 @@
 # Local Agent Gateway
 
+Your app talks to a local model over the OpenAI protocol, and something has to sit
+in between. If that something leaks, your token ends up in the logs; if a stream
+hangs, the app hangs with it; if there is no allowlist, any client can pull any
+model on the machine. This repo is that gateway — and, more to the point, the
+suite that catches all three before a user does.
+
 [![Quality](https://github.com/aka-gst/local-agent-gateway/actions/workflows/quality.yml/badge.svg)](https://github.com/aka-gst/local-agent-gateway/actions/workflows/quality.yml)
 [![Python 3.11+](https://img.shields.io/badge/Python-3.11%2B-3776AB?logo=python&logoColor=white)](https://www.python.org/)
 [![Allure report](https://img.shields.io/badge/Allure-live_report-ff4f64)](https://aka-gst.github.io/local-agent-gateway/)
