@@ -115,18 +115,17 @@ def test_demo_runs_evaluation_suite(page: Page, gateway_url: str) -> None:
 
 @pytest.mark.e2e
 def test_streaming_round_trip_over_real_http(gateway_url: str) -> None:
-    with httpx.Client(timeout=5) as client:
-        with client.stream(
-            "POST",
-            f"{gateway_url}/v1/chat/completions",
-            headers={"Authorization": f"Bearer {TOKEN}", "X-Request-ID": "e2e-stream-1"},
-            json={
-                "model": "local-test-model",
-                "messages": [{"role": "user", "content": "stream"}],
-                "stream": True,
-            },
-        ) as response:
-            body = b"".join(response.iter_bytes())
+    with httpx.Client(timeout=5) as client, client.stream(
+        "POST",
+        f"{gateway_url}/v1/chat/completions",
+        headers={"Authorization": f"Bearer {TOKEN}", "X-Request-ID": "e2e-stream-1"},
+        json={
+            "model": "local-test-model",
+            "messages": [{"role": "user", "content": "stream"}],
+            "stream": True,
+        },
+    ) as response:
+        body = b"".join(response.iter_bytes())
 
     assert response.status_code == 200
     assert response.headers["content-type"].startswith("text/event-stream")

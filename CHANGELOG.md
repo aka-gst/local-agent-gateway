@@ -7,6 +7,7 @@
 - kept MLX-LM strictly on loopback, including when remote Ollama is enabled;
 - recorded a same-suite Qwen3 8B A/B benchmark: both backends passed 9/9,
   Ollama had the faster median, and MLX had the lower p95;
+- added pinned lint and type-check tooling (`ruff` and `mypy`) to the test extra;
 - grew the suite from 66 to 69 tests with MLX routing and configuration guards.
 
 ## 0.3.0
