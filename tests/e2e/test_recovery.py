@@ -98,8 +98,8 @@ def recovery_harness() -> Iterator[RecoveryHarness]:
         upstream_port=upstream_port,
         gateway_port=gateway_port,
         environment=environment,
-        upstream=subprocess.Popen(["false"]),
-        gateway=subprocess.Popen(["false"]),
+        upstream=subprocess.Popen(["false"], text=True),
+        gateway=subprocess.Popen(["false"], text=True),
     )
     harness.start_upstream()
     harness.start_gateway()

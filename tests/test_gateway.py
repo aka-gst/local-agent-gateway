@@ -3,11 +3,13 @@ from __future__ import annotations
 import json
 import logging
 import threading
+from collections.abc import MutableMapping
 from typing import Any
 
 import httpx
 import pytest
 from fastapi.testclient import TestClient
+from pydantic import HttpUrl
 
 from local_agent_gateway.app import create_app
 from local_agent_gateway.config import Settings
@@ -26,7 +28,7 @@ def _test_settings() -> Settings:
         bearer_token=TOKEN,
         allowed_backends="ollama",
         allowed_models=MODEL,
-        ollama_base_url="http://127.0.0.1:11434/v1",
+        ollama_base_url=HttpUrl("http://127.0.0.1:11434/v1"),
         upstream_timeout_seconds=1,
     )
 
@@ -180,8 +182,8 @@ def test_mlx_request_is_routed_to_the_mlx_loopback_upstream() -> None:
         bearer_token=TOKEN,
         allowed_backends="ollama,mlx",
         allowed_models=MODEL,
-        ollama_base_url="http://127.0.0.1:11434/v1",
-        mlx_base_url="http://127.0.0.1:8080/v1",
+        ollama_base_url=HttpUrl("http://127.0.0.1:11434/v1"),
+        mlx_base_url=HttpUrl("http://127.0.0.1:8080/v1"),
         upstream_timeout_seconds=1,
     )
     app = create_app(configured, httpx.MockTransport(upstream))
@@ -431,7 +433,7 @@ def test_oversized_request_is_rejected_by_middleware() -> None:
 def test_chunked_oversized_request_stops_reading_before_the_next_chunk() -> None:
     configured = _test_settings().model_copy(update={"max_request_bytes": 1024})
     app = create_app(configured)
-    sent: list[dict[str, Any]] = []
+    sent: list[MutableMapping[str, Any]] = []
     receive_calls = 0
 
     async def receive() -> dict[str, object]:
@@ -441,7 +443,7 @@ def test_chunked_oversized_request_stops_reading_before_the_next_chunk() -> None
             return {"type": "http.request", "body": b"x" * 1025, "more_body": True}
         raise AssertionError("gateway must stop reading once the body limit is exceeded")
 
-    async def send(message: dict[str, Any]) -> None:
+    async def send(message: MutableMapping[str, Any]) -> None:
         sent.append(message)
 
     scope = {

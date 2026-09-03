@@ -11,7 +11,7 @@ pytestmark = pytest.mark.api
 def settings(**overrides) -> Settings:
     values = {"bearer_token": "test-token-at-least-sixteen-characters", "allowed_models": "model-a, model-b"}
     values.update(overrides)
-    return Settings(**values)
+    return Settings.model_validate(values)
 
 
 @pytest.mark.parametrize("field", ["allowed_backends", "allowed_models"])
