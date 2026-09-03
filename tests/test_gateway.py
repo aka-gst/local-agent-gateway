@@ -2,6 +2,8 @@ from __future__ import annotations
 
 import json
 import logging
+import threading
+from typing import Any
 
 import httpx
 import pytest
@@ -47,6 +49,35 @@ def test_health_is_public_and_has_request_id() -> None:
     assert response.status_code == 200
     assert response.json() == {"status": "ok"}
     assert response.headers["x-request-id"]
+
+
+def test_readiness_requires_a_reachable_local_backend() -> None:
+    calls: list[str] = []
+
+    def upstream(request: httpx.Request) -> httpx.Response:
+        calls.append(str(request.url))
+        return httpx.Response(200, json={"data": [{"id": MODEL}]})
+
+    app = create_app(_test_settings(), httpx.MockTransport(upstream))
+    with TestClient(app) as client:
+        response = client.get("/ready")
+
+    assert response.status_code == 200
+    assert response.json() == {"status": "ready", "backend": "ollama"}
+    assert calls == ["http://127.0.0.1:11434/v1/models"]
+
+
+def test_readiness_hides_backend_failure_details(caplog) -> None:
+    def upstream(request: httpx.Request) -> httpx.Response:
+        raise httpx.ConnectError(f"{EXCEPTION_MESSAGE} at {LOCAL_PATH}", request=request)
+
+    caplog.set_level(logging.INFO, logger="local_agent_gateway")
+    app = create_app(_test_settings(), httpx.MockTransport(upstream))
+    with TestClient(app) as client:
+        response = client.get("/ready")
+
+    assert response.json()["error"]["message"] == "backend not ready"
+    assert_safe_failure(response, caplog, 503)
 
 
 def test_invalid_bearer_is_rejected_without_sensitive_output(caplog) -> None:
@@ -230,6 +261,111 @@ def test_streaming_request_is_forwarded_and_upstream_is_closed() -> None:
     }
 
 
+def test_streaming_request_rejects_a_non_sse_upstream_response() -> None:
+    closed: list[bool] = []
+
+    class SyntheticStream(httpx.AsyncByteStream):
+        async def __aiter__(self):
+            yield b'{"not":"an event stream"}'
+
+        async def aclose(self) -> None:
+            closed.append(True)
+
+    app = create_app(
+        _test_settings(),
+        httpx.MockTransport(
+            lambda _: httpx.Response(
+                200,
+                headers={"content-type": "application/json"},
+                stream=SyntheticStream(),
+            ),
+        ),
+    )
+    with TestClient(app) as client:
+        response = client.post(
+            "/v1/chat/completions",
+            headers=auth(),
+            json={"model": MODEL, "messages": [], "stream": True},
+        )
+
+    assert response.status_code == 502
+    assert response.json()["error"]["message"] == "invalid upstream stream"
+    assert closed == [True]
+
+
+def test_stream_interruption_keeps_delivered_data_and_redacts_the_failure(caplog) -> None:
+    closed: list[bool] = []
+
+    class InterruptedStream(httpx.AsyncByteStream):
+        async def __aiter__(self):
+            yield b'data: {"choices":[{"delta":{"content":"partial"}}]}\n\n'
+            raise httpx.RemoteProtocolError(f"{EXCEPTION_MESSAGE} at {LOCAL_PATH}")
+
+        async def aclose(self) -> None:
+            closed.append(True)
+
+    caplog.set_level(logging.INFO, logger="local_agent_gateway")
+    app = create_app(
+        _test_settings(),
+        httpx.MockTransport(
+            lambda _: httpx.Response(
+                200,
+                headers={"content-type": "text/event-stream"},
+                stream=InterruptedStream(),
+            ),
+        ),
+    )
+    with TestClient(app) as client:
+        response = client.post(
+            "/v1/chat/completions",
+            headers=auth(),
+            json={"model": MODEL, "messages": [], "stream": True},
+        )
+
+    assert response.status_code == 200
+    assert b'"content":"partial"' in response.content
+    assert b"upstream stream interrupted" in response.content
+    assert response.content.endswith(b"data: [DONE]\n\n")
+    assert closed == [True]
+    for sensitive_value in SENSITIVE_VALUES:
+        assert sensitive_value not in response.text + caplog.text
+
+
+def test_invalid_stream_event_ends_with_a_safe_sse_error_and_closes_upstream(caplog) -> None:
+    captured: dict[str, object] = {}
+
+    class InvalidStream(httpx.AsyncByteStream):
+        async def __aiter__(self):
+            yield b"private invalid backend event\n\n"
+
+        async def aclose(self) -> None:
+            captured["closed"] = True
+
+    caplog.set_level(logging.INFO, logger="local_agent_gateway")
+    app = create_app(
+        _test_settings(),
+        httpx.MockTransport(
+            lambda _: httpx.Response(
+                200,
+                headers={"content-type": "text/event-stream"},
+                stream=InvalidStream(),
+            )
+        ),
+    )
+    with TestClient(app) as client:
+        response = client.post(
+            "/v1/chat/completions",
+            headers=auth(),
+            json={"model": MODEL, "messages": [], "stream": True},
+        )
+
+    assert response.status_code == 200
+    assert b"invalid upstream stream" in response.content
+    assert response.content.endswith(b"data: [DONE]\n\n")
+    assert captured == {"closed": True}
+    assert "private invalid backend event" not in response.text + caplog.text
+
+
 def test_upstream_connection_failure_is_neutral_and_safe(caplog) -> None:
     def upstream(request: httpx.Request) -> httpx.Response:
         raise httpx.ConnectError(f"{EXCEPTION_MESSAGE} at {LOCAL_PATH}", request=request)
@@ -290,6 +426,59 @@ def test_oversized_request_is_rejected_by_middleware() -> None:
         )
     assert response.status_code == 413
     assert response.json()["error"]["message"] == "request too large"
+
+
+def test_chunked_oversized_request_stops_reading_before_the_next_chunk() -> None:
+    configured = _test_settings().model_copy(update={"max_request_bytes": 1024})
+    app = create_app(configured)
+    sent: list[dict[str, Any]] = []
+    receive_calls = 0
+
+    async def receive() -> dict[str, object]:
+        nonlocal receive_calls
+        receive_calls += 1
+        if receive_calls == 1:
+            return {"type": "http.request", "body": b"x" * 1025, "more_body": True}
+        raise AssertionError("gateway must stop reading once the body limit is exceeded")
+
+    async def send(message: dict[str, Any]) -> None:
+        sent.append(message)
+
+    scope = {
+        "type": "http",
+        "asgi": {"version": "3.0", "spec_version": "2.3"},
+        "http_version": "1.1",
+        "method": "POST",
+        "scheme": "http",
+        "path": "/v1/chat/completions",
+        "raw_path": b"/v1/chat/completions",
+        "query_string": b"",
+        "root_path": "",
+        "headers": [
+            (b"authorization", f"Bearer {TOKEN}".encode()),
+            (b"content-type", b"application/json"),
+        ],
+        "client": ("testclient", 50000),
+        "server": ("testserver", 80),
+    }
+    errors: list[BaseException] = []
+
+    def invoke_asgi() -> None:
+        import asyncio
+
+        try:
+            asyncio.run(app(scope, receive, send))
+        except (AssertionError, RuntimeError, BaseExceptionGroup) as error:
+            errors.append(error)
+
+    thread = threading.Thread(target=invoke_asgi)
+    thread.start()
+    thread.join(timeout=2)
+
+    assert not thread.is_alive()
+    assert not errors
+    assert receive_calls == 1
+    assert sent[0]["status"] == 413
 
 
 def test_unsafe_request_id_is_replaced() -> None:

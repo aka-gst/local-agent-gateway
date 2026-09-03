@@ -85,6 +85,14 @@ def test_demo_success(page: Page, gateway_url: str) -> None:
 
 
 @pytest.mark.e2e
+def test_readiness_checks_the_fake_backend_over_real_http(gateway_url: str) -> None:
+    response = httpx.get(f"{gateway_url}/ready", timeout=2)
+
+    assert response.status_code == 200
+    assert response.json() == {"status": "ready", "backend": "ollama"}
+
+
+@pytest.mark.e2e
 def test_demo_rejects_invalid_token(page: Page, gateway_url: str) -> None:
     page.goto(f"{gateway_url}/demo")
     page.locator("#token").fill("invalid-token")

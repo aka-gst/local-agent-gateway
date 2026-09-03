@@ -23,6 +23,7 @@ class Settings(BaseSettings):
     allow_remote_upstream: bool = False
     upstream_timeout_seconds: float = Field(default=30.0, gt=0, le=300)
     max_request_bytes: int = Field(default=1_048_576, ge=1024, le=10_485_760)
+    port: int = Field(default=8642, ge=1, le=65535)
 
     @field_validator("allowed_backends", "allowed_models")
     @classmethod

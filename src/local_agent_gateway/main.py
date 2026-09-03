@@ -3,11 +3,19 @@ import logging
 import uvicorn
 
 from .app import create_app
+from .config import get_settings
 
 
 def run() -> None:
     logging.basicConfig(level=logging.INFO, format="%(levelname)s %(name)s %(message)s")
-    uvicorn.run(create_app(), host="127.0.0.1", port=8642, access_log=False)
+    settings = get_settings()
+    uvicorn.run(
+        create_app(settings),
+        host="127.0.0.1",
+        port=settings.port,
+        access_log=False,
+        timeout_graceful_shutdown=5,
+    )
 
 
 if __name__ == "__main__":
