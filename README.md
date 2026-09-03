@@ -10,11 +10,13 @@ suite that catches all three before a user does.
 [![Python 3.11+](https://img.shields.io/badge/Python-3.11%2B-3776AB?logo=python&logoColor=white)](https://www.python.org/)
 [![Allure report](https://img.shields.io/badge/Allure-live_report-ff4f64)](https://aka-gst.github.io/local-agent-gateway/)
 
-Minimal loopback-only FastAPI gateway between an OpenAI-compatible client and a
-local Ollama server.
+Minimal FastAPI gateway between an OpenAI-compatible client and a local Ollama
+or MLX-LM server. Ollama remains the default; each request can select the
+allowlisted `mlx` backend explicitly.
 
 ```text
 Open-LLM-VTuber -> http://127.0.0.1:8642/v1 -> Ollama at http://127.0.0.1:11434/v1
+                                             -> MLX-LM at http://127.0.0.1:8080/v1
 ```
 
 The gateway exposes a public `GET /health` endpoint. Requests to
@@ -195,7 +197,19 @@ GATEWAY_ALLOWED_MODELS=<exact-name-from-ollama-list>
 ```
 
 The defaults restrict the gateway to the `ollama` backend at
-`http://127.0.0.1:11434/v1`. Do not weaken the loopback binding.
+`http://127.0.0.1:11434/v1`. To make MLX selectable, add `mlx` to
+`GATEWAY_ALLOWED_BACKENDS`, add the exact MLX model name to
+`GATEWAY_ALLOWED_MODELS`, and keep `GATEWAY_MLX_BASE_URL` at
+`http://127.0.0.1:8080/v1`. Send `"backend": "mlx"` in a request to choose
+it. MLX is deliberately loopback-only even when remote Ollama is explicitly
+enabled: the reference MLX-LM server provides basic access control and is not a
+public production boundary.
+
+In the 2026-09-03 local A/B on the same nine safety/quality runs, both
+Qwen3 8B backends passed 9/9. Ollama had the faster median (3.16 s versus
+8.54 s); MLX had the lower p95 (11.87 s versus 15.56 s). This is why the
+gateway keeps Ollama as the default and exposes MLX as an explicit alternative
+instead of silently replacing the existing backend.
 
 ### Back up and configure Open-LLM-VTuber
 

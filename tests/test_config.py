@@ -31,9 +31,26 @@ def test_remote_upstream_requires_explicit_opt_in() -> None:
     assert configured.ollama_base_url.host == "ollama"
 
 
-def test_only_ollama_backend_is_supported() -> None:
-    with pytest.raises(ValidationError, match="only the ollama backend"):
+def test_only_local_backends_are_supported() -> None:
+    with pytest.raises(ValidationError, match="only local backends"):
         settings(allowed_backends="ollama,openrouter")
+
+
+def test_mlx_backend_is_supported_on_loopback() -> None:
+    configured = settings(
+        allowed_backends="ollama,mlx",
+        mlx_base_url="http://127.0.0.1:8080/v1",
+    )
+    assert configured.backend_allowlist == frozenset({"ollama", "mlx"})
+
+
+def test_mlx_upstream_must_remain_loopback_even_when_remote_ollama_is_enabled() -> None:
+    with pytest.raises(ValidationError, match="MLX base URL must use a loopback host"):
+        settings(
+            allowed_backends="ollama,mlx",
+            mlx_base_url="http://example.com/v1",
+            allow_remote_upstream=True,
+        )
 
 
 def test_default_backend_must_be_allowlisted() -> None:

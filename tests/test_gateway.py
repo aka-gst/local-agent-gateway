@@ -137,6 +137,44 @@ def test_allowed_request_is_forwarded_without_client_auth_or_backend() -> None:
     }
 
 
+def test_mlx_request_is_routed_to_the_mlx_loopback_upstream() -> None:
+    captured: dict[str, object] = {}
+
+    def upstream(request: httpx.Request) -> httpx.Response:
+        captured["url"] = str(request.url)
+        captured["json"] = json.loads(request.content)
+        return httpx.Response(200, json={"id": "mlx-local", "choices": []})
+
+    configured = Settings(
+        bearer_token=TOKEN,
+        allowed_backends="ollama,mlx",
+        allowed_models=MODEL,
+        ollama_base_url="http://127.0.0.1:11434/v1",
+        mlx_base_url="http://127.0.0.1:8080/v1",
+        upstream_timeout_seconds=1,
+    )
+    app = create_app(configured, httpx.MockTransport(upstream))
+    with TestClient(app) as client:
+        response = client.post(
+            "/v1/chat/completions",
+            headers=auth(),
+            json={
+                "backend": "mlx",
+                "model": MODEL,
+                "messages": [{"role": "user", "content": "synthetic prompt"}],
+            },
+        )
+
+    assert response.status_code == 200
+    assert captured == {
+        "url": "http://127.0.0.1:8080/v1/chat/completions",
+        "json": {
+            "model": MODEL,
+            "messages": [{"role": "user", "content": "synthetic prompt"}],
+        },
+    }
+
+
 def test_streaming_request_is_forwarded_and_upstream_is_closed() -> None:
     captured: dict[str, object] = {}
 

@@ -116,7 +116,8 @@ def create_app(
             return _error(400, "model not allowed", request_id)
         if not isinstance(payload.get("messages"), list):
             return _error(400, "invalid request", request_id)
-        upstream_url = f"{str(configured.ollama_base_url).rstrip('/')}/chat/completions"
+        base_url = configured.mlx_base_url if backend == "mlx" else configured.ollama_base_url
+        upstream_url = f"{str(base_url).rstrip('/')}/chat/completions"
         if payload.get("stream") is True:
             upstream_request = request.app.state.http.build_request(
                 "POST",
