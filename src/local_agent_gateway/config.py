@@ -19,9 +19,11 @@ class Settings(BaseSettings):
     allowed_models: str = Field(min_length=1)
     default_backend: str = "ollama"
     ollama_base_url: HttpUrl = HttpUrl("http://127.0.0.1:11434/v1")
+    mlx_base_url: HttpUrl = HttpUrl("http://127.0.0.1:8080/v1")
     allow_remote_upstream: bool = False
     upstream_timeout_seconds: float = Field(default=30.0, gt=0, le=300)
     max_request_bytes: int = Field(default=1_048_576, ge=1024, le=10_485_760)
+    port: int = Field(default=8642, ge=1, le=65535)
 
     @field_validator("allowed_backends", "allowed_models")
     @classmethod
@@ -34,8 +36,10 @@ class Settings(BaseSettings):
     def validate_backend_configuration(self) -> Settings:
         if self.ollama_base_url.host not in {"127.0.0.1", "localhost", "::1"} and not self.allow_remote_upstream:
             raise ValueError("Ollama base URL must use a loopback host unless remote upstream is explicitly enabled")
-        if not self.backend_allowlist.issubset({"ollama"}):
-            raise ValueError("only the ollama backend is supported")
+        if self.mlx_base_url.host not in {"127.0.0.1", "localhost", "::1"}:
+            raise ValueError("MLX base URL must use a loopback host")
+        if not self.backend_allowlist.issubset({"ollama", "mlx"}):
+            raise ValueError("only local backends are supported")
         if self.default_backend not in self.backend_allowlist:
             raise ValueError("default backend must be allowlisted")
         return self

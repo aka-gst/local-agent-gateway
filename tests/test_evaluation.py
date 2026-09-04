@@ -3,7 +3,12 @@ import sys
 
 import pytest
 
-from local_agent_gateway.evaluation import _token_f1, evaluate_case, evaluate_dataset, main
+from local_agent_gateway.evaluation import (
+    _token_f1,
+    evaluate_case,
+    evaluate_dataset,
+    main,
+)
 
 
 @pytest.mark.llm_eval

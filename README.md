@@ -10,14 +10,17 @@ suite that catches all three before a user does.
 [![Python 3.11+](https://img.shields.io/badge/Python-3.11%2B-3776AB?logo=python&logoColor=white)](https://www.python.org/)
 [![Allure report](https://img.shields.io/badge/Allure-live_report-ff4f64)](https://aka-gst.github.io/local-agent-gateway/)
 
-Minimal loopback-only FastAPI gateway between an OpenAI-compatible client and a
-local Ollama server.
+Minimal FastAPI gateway between an OpenAI-compatible client and a local Ollama
+or MLX-LM server. Ollama remains the default; each request can select the
+allowlisted `mlx` backend explicitly.
 
 ```text
 Open-LLM-VTuber -> http://127.0.0.1:8642/v1 -> Ollama at http://127.0.0.1:11434/v1
+                                             -> MLX-LM at http://127.0.0.1:8080/v1
 ```
 
-The gateway exposes a public `GET /health` endpoint. Requests to
+The gateway exposes public `GET /health` (process liveness) and `GET /ready`
+(configured backend reachability) endpoints. Requests to
 `POST /v1/chat/completions` require a bearer token. Both streaming and
 non-streaming chat-completion requests are supported.
 
@@ -53,7 +56,7 @@ not require Ollama, an external API, a real model, or a real secret.
 | Unsafe or incomplete assistant guidance | Golden-response LLM evaluations |
 | UI and API integration regressions | Chromium end-to-end tests with isolated processes |
 
-The current suite contains 66 automated tests and covers 99% of the Python
+The current suite contains 79 automated tests and covers 97% of the Python
 code. The latest interactive [Allure report](https://aka-gst.github.io/local-agent-gateway/)
 is published from the successful `main` workflow. CI enforces a 90% minimum
 and carries Allure trend history forward between deployments.
@@ -195,7 +198,19 @@ GATEWAY_ALLOWED_MODELS=<exact-name-from-ollama-list>
 ```
 
 The defaults restrict the gateway to the `ollama` backend at
-`http://127.0.0.1:11434/v1`. Do not weaken the loopback binding.
+`http://127.0.0.1:11434/v1`. To make MLX selectable, add `mlx` to
+`GATEWAY_ALLOWED_BACKENDS`, add the exact MLX model name to
+`GATEWAY_ALLOWED_MODELS`, and keep `GATEWAY_MLX_BASE_URL` at
+`http://127.0.0.1:8080/v1`. Send `"backend": "mlx"` in a request to choose
+it. MLX is deliberately loopback-only even when remote Ollama is explicitly
+enabled: the reference MLX-LM server provides basic access control and is not a
+public production boundary.
+
+In the 2026-09-03 local A/B on the same nine safety/quality runs, both
+Qwen3 8B backends passed 9/9. Ollama had the faster median (3.16 s versus
+8.54 s); MLX had the lower p95 (11.87 s versus 15.56 s). This is why the
+gateway keeps Ollama as the default and exposes MLX as an explicit alternative
+instead of silently replacing the existing backend.
 
 ### Back up and configure Open-LLM-VTuber
 
@@ -371,6 +386,27 @@ remain listed when the Ollama tray application was intentionally left running.
 Do not terminate an unknown process by PID; identify and close its owning
 application normally.
 
+### Gateway recovery runbook
+
+`GET /health` returning `200` means the gateway process is alive. `GET /ready`
+also checks the configured default backend; it returns a neutral `503 backend
+not ready` while that backend is stopped or unavailable. Neither endpoint
+returns backend addresses, request bodies, or tokens.
+
+For a normal stop, use `Ctrl+C` and wait for the process to exit. After an
+unexpected stop, start the same local gateway command again:
+
+```powershell
+uv run local-agent-gateway
+```
+
+Then confirm `/ready` before sending another request. The gateway never retries
+a chat request automatically: a partially completed generation could otherwise
+be duplicated. If an SSE response has already started and the upstream breaks,
+the gateway preserves only validated events and finishes with a neutral SSE
+`gateway_error` plus `[DONE]`; do not treat that response as a completed model
+answer.
+
 ### Troubleshooting
 
 | Symptom | Class | Check | Fix |
@@ -379,6 +415,7 @@ application normally.
 | `address already in use` on `11434` | Port conflict | Run `Get-NetTCPConnection -State Listen -LocalPort 11434` | Do not start `ollama serve` when the Ollama tray server is already active |
 | Gateway fails during startup with a settings error | Configuration | Check that required `GATEWAY_` names exist in `.env` without printing their values | Correct the local `.env`; token length must be at least 16 characters and model allowlist must not be empty |
 | Gateway `/health` cannot connect | Startup or port conflict | Check Window 2 and listener `8642` | Start the gateway from its project environment; close the known conflicting application normally |
+| Gateway `/ready` returns `503 backend not ready` | Backend unavailable | Check the local backend's own health command | Start or repair the configured backend, then wait for `/ready` to return `200`; do not print gateway configuration |
 | Gateway returns `401 unauthorized` | Authentication | Confirm Open-LLM-VTuber uses the same token as the gateway without logging either value | Re-enter the same token in both local configurations and restart both clients of that configuration |
 | Gateway returns `400 model not allowed` | Allowlist | Compare the Open-LLM-VTuber model with `ollama list` and `GATEWAY_ALLOWED_MODELS` | Use the exact same model name, including tag and ASCII colon |
 | Gateway returns `400 backend not allowed` | Allowlist | Check the client payload and `GATEWAY_ALLOWED_BACKENDS` | Use the default `ollama` backend; do not send a different `backend` value |
@@ -408,6 +445,12 @@ From the `local-agent-gateway` project directory:
 
 ```powershell
 uv run pytest -q
+```
+
+The isolated recovery and concurrency checks use only fake loopback processes:
+
+```powershell
+uv run pytest -q tests/e2e/test_recovery.py tests/e2e/test_stability.py -s
 ```
 
 ## Command sources

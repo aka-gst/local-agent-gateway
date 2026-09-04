@@ -9,8 +9,9 @@ from __future__ import annotations
 
 import argparse
 import json
-from datetime import datetime, timezone
-from importlib.metadata import PackageNotFoundError, version as package_version
+from datetime import UTC, datetime
+from importlib.metadata import PackageNotFoundError
+from importlib.metadata import version as package_version
 from pathlib import Path
 from typing import Any
 
@@ -306,7 +307,7 @@ def main() -> None:
         coverage=collect_coverage(args.coverage, args.coverage_threshold),
         deterministic=collect_deterministic_evaluation(args.deterministic_eval),
         live=collect_live_benchmark(args.live_benchmark),
-        generated_at=datetime.now(timezone.utc).isoformat(timespec="seconds").replace("+00:00", "Z"),
+        generated_at=datetime.now(UTC).isoformat(timespec="seconds").replace("+00:00", "Z"),
         commit=args.commit,
         branch=args.branch,
         run_url=args.run_url,

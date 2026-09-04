@@ -12,6 +12,7 @@
 ## API behavior
 
 - [ ] `GET /health` returns `200` and a request ID.
+- [ ] `GET /ready` confirms the configured backend, or returns neutral `503`.
 - [ ] Missing/invalid authentication returns a neutral `401`.
 - [ ] Incorrect media type and malformed JSON are rejected.
 - [ ] Oversized requests return `413` before proxying.
@@ -19,6 +20,11 @@
 - [ ] Valid streaming requests preserve SSE content type and `[DONE]`.
 - [ ] Upstream timeouts/network/HTTP errors become safe `502` responses.
 - [ ] Upstream streams are closed after completion.
+- [ ] Interrupted or malformed SSE emits a neutral terminal SSE error, never
+  backend details.
+- [ ] Chunked oversized input stops reading before proxying.
+- [ ] Concurrent requests remain isolated; graceful and forced-stop restart
+  checks pass against the fake backend.
 
 ## UI and reports
 
@@ -27,7 +33,7 @@
 - [ ] Invalid token scenario displays a readable error.
 - [ ] LLM evaluation emits JSON and Markdown reports.
 - [ ] Allure contains environment, feature, story, and severity metadata.
-- [ ] GitHub Pages shows the latest 36-test report and trend history.
+- [ ] GitHub Pages shows the latest 79-test report and trend history.
 
 ## Delivery
 

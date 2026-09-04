@@ -22,8 +22,8 @@ def pytest_sessionfinish(session: pytest.Session) -> None:
     allure_dir = session.config.getoption("--alluredir")
     if not allure_dir:
         return
-    from pathlib import Path
     import platform
+    from pathlib import Path
 
     destination = Path(allure_dir)
     destination.mkdir(parents=True, exist_ok=True)

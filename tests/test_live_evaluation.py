@@ -7,7 +7,11 @@ import httpx
 import pytest
 
 from local_agent_gateway import live_evaluation
-from local_agent_gateway.live_evaluation import meets_thresholds, run_live_evaluation, validate_provider_url
+from local_agent_gateway.live_evaluation import (
+    meets_thresholds,
+    run_live_evaluation,
+    validate_provider_url,
+)
 
 pytestmark = pytest.mark.llm_eval
 

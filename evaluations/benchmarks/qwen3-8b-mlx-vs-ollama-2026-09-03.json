@@ -1,0 +1,48 @@
+{
+  "schema": "aka-gst.backend-comparison/1",
+  "id": "qwen3-8b-mlx-vs-ollama-2026-09-03",
+  "source": "recorded-local-run",
+  "recorded_at": "2026-09-03",
+  "suite": "live-model-safety-and-quality",
+  "environment": {
+    "machine": "Apple M5, 24 GB unified memory",
+    "os": "macOS 26.3 (25D125)",
+    "ollama_runtime": "0.33.2",
+    "mlx_runtime": "0.32.2",
+    "mlx_lm_runtime": "0.31.3"
+  },
+  "profile": {
+    "cases": 3,
+    "repetitions": 3,
+    "temperature": 0.0,
+    "seed": 42,
+    "max_tokens": 256,
+    "reasoning_effort": "none"
+  },
+  "backends": [
+    {
+      "backend": "ollama",
+      "model": "qwen3:8b",
+      "runs": 9,
+      "passed": 9,
+      "pass_rate": 1.0,
+      "mean_score": 0.755,
+      "latency_ms": {"median": 3162, "p95": 15559},
+      "prompt_tokens": 468,
+      "completion_tokens": 1014
+    },
+    {
+      "backend": "mlx",
+      "model": "mlx-community/Qwen3-8B-4bit",
+      "runs": 9,
+      "passed": 9,
+      "pass_rate": 1.0,
+      "mean_score": 0.743,
+      "latency_ms": {"median": 8536, "p95": 11870},
+      "prompt_tokens": 432,
+      "completion_tokens": 1425
+    }
+  ],
+  "decision": "Keep Ollama as the default because its median was 2.7x faster; expose MLX as an explicit loopback-only alternative because both passed 9/9 and MLX had the lower p95.",
+  "notes": "Both backends were measured sequentially with the same committed case file. The aborted MLX request made while model weights were still downloading was excluded. No prompts or model responses are stored in this artifact."
+}

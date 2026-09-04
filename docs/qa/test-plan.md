@@ -13,6 +13,8 @@ Ollama-compatible upstream, and fails without exposing secrets.
 - JSON validation and request-size boundaries;
 - non-streaming and streaming proxy behavior;
 - upstream timeout, network, HTTP, and malformed-response failures;
+- backend-aware readiness, controlled shutdown, forced-stop recovery, and
+  concurrent request isolation;
 - request-ID creation and propagation;
 - browser interaction with the QA console;
 - deterministic response-quality and secret-leak rules;
@@ -66,10 +68,12 @@ No real token is stored in source control. CI tests use synthetic credentials.
 
 1. Authentication bypass or secret leakage.
 2. A disallowed model/backend reaching the upstream.
-3. Streaming responses being buffered, truncated, or left open.
+3. Streaming responses being buffered, truncated, left open, or silently
+   treated as complete after an upstream break.
 4. Internal upstream details reaching a client or logs.
 5. UI success while the actual API contract is broken.
 6. Non-reproducible tests that require a real model or paid provider.
+7. A restarted process or simultaneous requests losing request isolation.
 
 ## Test data strategy
 

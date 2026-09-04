@@ -4,8 +4,8 @@ build-backend = "hatchling.build"
 
 [project]
 name = "local-agent-gateway"
-version = "0.3.0"
-description = "Loopback-only gateway for a local Ollama backend"
+version = "0.4.0"
+description = "Loopback-only gateway for local Ollama and MLX-LM backends"
 requires-python = ">=3.11"
 dependencies = [
   "fastapi>=0.115,<1",
@@ -17,9 +17,11 @@ dependencies = [
 [project.optional-dependencies]
 test = [
   "allure-pytest>=2.15,<3",
+  "mypy>=1.18,<2",
   "pytest>=8,<9",
   "pytest-cov>=6,<7",
   "pytest-playwright>=0.7,<1",
+  "ruff>=0.12,<1",
 ]
 
 [project.scripts]
