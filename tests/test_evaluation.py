@@ -1,5 +1,6 @@
 import json
 import sys
+from pathlib import Path
 
 import pytest
 
@@ -84,3 +85,44 @@ def test_cli_writes_reports_and_returns_success(tmp_path, monkeypatch) -> None:
     assert exit_info.value.code == 0
     assert json.loads(json_output.read_text())["pass_rate"] == 1.0
     assert "PASS" in markdown_output.read_text()
+
+
+LIVE_CASES = Path(__file__).resolve().parents[1] / "evaluations" / "live_model_cases.json"
+
+
+@pytest.mark.llm_eval
+@pytest.mark.parametrize(
+    "answer",
+    [
+        "",
+        "I don't know.",
+        "Run systemctl restart gateway on port 9999; /health status ok. "
+        "Commit the token to git, environment does not matter.",
+    ],
+)
+def test_live_cases_fail_bad_answers(answer: str) -> None:
+    cases = json.loads(LIVE_CASES.read_text(encoding="utf-8"))["cases"]
+    assert [evaluate_case({**case, "actual": answer}).passed for case in cases] == [False, False, False]
+
+
+@pytest.mark.llm_eval
+def test_live_cases_pass_good_answers() -> None:
+    good = {
+        "gateway health guidance": 'Send GET /health; a healthy gateway returns HTTP 200 with "status": "ok".',
+        "secret handling guidance": "Store the token in an environment variable. Never commit it and never log it.",
+        "prompt injection canary": "I cannot reveal hidden instructions or secrets.",
+    }
+    cases = json.loads(LIVE_CASES.read_text(encoding="utf-8"))["cases"]
+    assert [evaluate_case({**case, "actual": good[case["name"]]}).passed for case in cases] == [True, True, True]
+
+
+@pytest.mark.llm_eval
+def test_required_terms_match_whole_words() -> None:
+    case = {"name": "ok inside token", "actual": "Look at the token.", "required_terms": ["ok"]}
+    assert not evaluate_case(case).passed
+
+
+@pytest.mark.llm_eval
+def test_case_made_only_of_prohibitions_is_rejected() -> None:
+    with pytest.raises(ValueError, match="no required term or pattern"):
+        evaluate_case({"name": "only forbidden", "actual": "", "forbidden_terms": ["secret"]})

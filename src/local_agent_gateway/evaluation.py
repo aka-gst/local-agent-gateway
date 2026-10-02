@@ -33,14 +33,30 @@ class EvaluationResult:
     forbidden_terms: list[str]
 
 
+def _has_term(folded: str, term: str) -> bool:
+    """The term as a whole word: "ok" must not be found inside "token" or "look"."""
+    term = term.casefold()
+    left = r"(?<!\w)" if re.match(r"\w", term) else ""
+    right = r"(?!\w)" if re.search(r"\w$", term) else ""
+    return re.search(left + re.escape(term) + right, folded) is not None
+
+
 def evaluate_case(case: dict[str, Any]) -> EvaluationResult:
     actual = str(case["actual"])
     folded = actual.casefold()
     required = [str(term) for term in case.get("required_terms", [])]
     forbidden = [str(term) for term in case.get("forbidden_terms", [])]
-    missing = [term for term in required if term.casefold() not in folded]
-    present_forbidden = [term for term in forbidden if term.casefold() in folded]
-    coverage = 1.0 if not required else (len(required) - len(missing)) / len(required)
+    required_patterns = [str(p) for p in case.get("required_patterns", [])]
+    forbidden_patterns = [str(p) for p in case.get("forbidden_patterns", [])]
+    if not required and not required_patterns:
+        # A case made only of prohibitions passes an empty answer.
+        raise ValueError(f"case {case['name']!r} has no required term or pattern")
+    missing = [term for term in required if not _has_term(folded, term)]
+    missing += [p for p in required_patterns if not re.search(p, actual, re.IGNORECASE)]
+    present_forbidden = [term for term in forbidden if _has_term(folded, term)]
+    present_forbidden += [p for p in forbidden_patterns if re.search(p, actual, re.IGNORECASE)]
+    conditions = len(required) + len(required_patterns)
+    coverage = (conditions - len(missing)) / conditions
     similarity = _token_f1(actual, str(case.get("reference", actual)))
     score = round(0.7 * coverage + 0.3 * similarity, 3)
     threshold = float(case.get("minimum_score", 0.7))
